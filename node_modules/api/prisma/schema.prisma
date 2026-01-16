@@ -1,0 +1,73 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+model User {
+  id        String   @id @default(uuid())
+  
+  name      String?
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  documents Document[]
+  shares    DocumentShare[]
+  comments Comment[]
+}
+model Document {
+  id          String   @id @default(uuid())
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id])
+  title       String
+  fileUrl     String
+  fileName    String
+  fileSize    Int
+  createdAt   DateTime @default(now())
+
+  shares      DocumentShare[]
+  comments Comment[]
+}
+enum DocumentRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+model DocumentShare {
+  id          String       @id @default(uuid())
+  documentId  String
+  userId      String
+  role        DocumentRole @default(VIEWER)
+  createdAt   DateTime     @default(now())
+
+  document    Document     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, userId])
+}
+model Comment {
+  id          String   @id @default(uuid())
+  documentId  String
+  userId      String
+
+  pageNumber  Int
+  x           Float
+  y           Float
+
+  message     String
+  createdAt   DateTime @default(now())
+
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+
