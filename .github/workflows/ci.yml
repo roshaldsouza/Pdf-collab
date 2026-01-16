@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      # ---- API checks ----
+      - name: API - Typecheck
+        run: npm run typecheck --workspace=apps/api
+
+      - name: API - Build
+        run: npm run build --workspace=apps/api
+
+      # ---- WEB checks ----
+      - name: WEB - Typecheck
+        run: npm run typecheck --workspace=apps/web
+
+      - name: WEB - Build
+        run: npm run build --workspace=apps/web
+
+
