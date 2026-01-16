@@ -1,0 +1,11 @@
+{
+    "name": "pdf-collab",
+    "private": true,
+    "workspaces": ["apps/*", "packages/*"],
+    "scripts": {
+      "dev": "npm run dev --workspace=apps/web & npm run dev --workspace=apps/api",
+      "build": "npm run build --workspace=apps/web && npm run build --workspace=apps/api",
+      "typecheck": "npm run typecheck --workspace=apps/web && npm run typecheck --workspace=apps/api"
+    }
+  }
+  
