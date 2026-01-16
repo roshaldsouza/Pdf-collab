@@ -35,6 +35,9 @@ export default function DocPage() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [error, setError] = useState("");
 
+  // ✅ Step 10: selected pin/comment
+  const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
+
   // comment form
   const [pageNumber, setPageNumber] = useState(1);
   const [x, setX] = useState(0.5);
@@ -101,6 +104,20 @@ export default function DocPage() {
     }
   }
 
+  // ✅ Step 10: click inside canvas to set relative x,y
+  function handleCanvasClick(e: React.MouseEvent<HTMLDivElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    const relX = clickX / rect.width;
+    const relY = clickY / rect.height;
+
+    setX(Number(relX.toFixed(2)));
+    setY(Number(relY.toFixed(2)));
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-white p-6">
       {/* Top Bar */}
@@ -133,6 +150,46 @@ export default function DocPage() {
             <p className="text-sm text-slate-400 mb-4">
               File: {doc.fileName} • {(doc.fileSize / 1024).toFixed(1)} KB
             </p>
+
+            {/* ✅ Step 10: Clickable canvas with pins */}
+            <div className="mb-4">
+              <p className="text-sm text-slate-400 mb-2">
+                Click inside the box to auto-set comment position (x,y)
+              </p>
+
+              <div
+                onClick={handleCanvasClick}
+                className="relative w-full h-[420px] rounded-xl bg-slate-800 border border-slate-700 overflow-hidden cursor-crosshair"
+              >
+                {/* Pins */}
+                {comments.map((c) => {
+                  const left = `${c.x * 100}%`;
+                  const top = `${c.y * 100}%`;
+                  const active = selectedCommentId === c.id;
+
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        setSelectedCommentId(c.id);
+                      }}
+                      className={`absolute w-4 h-4 rounded-full border-2 ${
+                        active
+                          ? "bg-yellow-400 border-yellow-200"
+                          : "bg-red-500 border-red-200"
+                      }`}
+                      style={{
+                        left,
+                        top,
+                        transform: "translate(-50%, -50%)",
+                      }}
+                      title={`Page ${c.pageNumber}: ${c.message}`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
 
             <a
               className="inline-block px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition"
@@ -219,7 +276,11 @@ export default function DocPage() {
                 {comments.map((c) => (
                   <div
                     key={c.id}
-                    className="p-3 rounded-lg bg-slate-800 border border-slate-700"
+                    className={`p-3 rounded-lg border ${
+                      selectedCommentId === c.id
+                        ? "bg-slate-700 border-yellow-400"
+                        : "bg-slate-800 border-slate-700"
+                    }`}
                   >
                     <p className="text-sm text-slate-300 mb-1">
                       <span className="font-semibold">
