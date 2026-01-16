@@ -1,72 +1,102 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 
 type Doc = {
   id: string;
   title: string;
-  myRole?: string;
+  myRole: "OWNER" | "EDITOR" | "VIEWER";
+  createdAt?: string;
 };
+
+function RoleBadge({ role }: { role: Doc["myRole"] }) {
+  const base = "text-xs px-2 py-1 rounded-full border";
+  if (role === "OWNER")
+    return (
+      <span className={`${base} bg-emerald-900/30 border-emerald-700 text-emerald-200`}>
+        OWNER
+      </span>
+    );
+  if (role === "EDITOR")
+    return (
+      <span className={`${base} bg-blue-900/30 border-blue-700 text-blue-200`}>
+        EDITOR
+      </span>
+    );
+  return (
+    <span className={`${base} bg-slate-800 border-slate-700 text-slate-200`}>
+      VIEWER
+    </span>
+  );
+}
 
 export default function DashboardPage() {
   const router = useRouter();
 
   const [docs, setDocs] = useState<Doc[]>([]);
   const [error, setError] = useState("");
-  const [loadingDocs, setLoadingDocs] = useState(true);
+  const [loading, setLoading] = useState(true);
 
+  // upload
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  async function loadDocs() {
-    setLoadingDocs(true);
-    setError("");
+  // search
+  const [query, setQuery] = useState("");
 
-    try {
-      const data = await apiFetch("/documents");
-      setDocs(data.documents || []);
-    } catch (e: any) {
-      setError(e.message || "Failed to load documents");
-      router.push("/login");
-    } finally {
-      setLoadingDocs(false);
-    }
+  async function loadDocs() {
+    const data = await apiFetch("/documents");
+    setDocs(data.documents || []);
   }
 
   useEffect(() => {
-    loadDocs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const token = localStorage.getItem("token");
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
 
-  async function handleUpload(e: React.FormEvent) {
+    async function init() {
+      setError("");
+      try {
+        setLoading(true);
+        await loadDocs();
+      } catch (e: any) {
+        setError(e.message || "Failed to load dashboard");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    init();
+  }, [router]);
+
+  async function uploadPdf(e: React.FormEvent) {
     e.preventDefault();
     setError("");
 
     if (!file) {
-      setError("Please select a PDF file");
+      setError("Please choose a PDF file");
       return;
     }
 
     try {
       setUploading(true);
 
-      const form = new FormData();
-      form.append("title", title || file.name);
-      form.append("file", file);
+      const formData = new FormData();
+      if (title.trim()) formData.append("title", title);
+      formData.append("file", file);
 
       await apiFetch("/documents/upload", {
         method: "POST",
-        body: form,
+        body: formData,
       });
 
-      // reset form
       setTitle("");
       setFile(null);
-
-      // refresh docs
       await loadDocs();
     } catch (e: any) {
       setError(e.message || "Upload failed");
@@ -75,97 +105,136 @@ export default function DashboardPage() {
     }
   }
 
+  const filteredDocs = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return docs;
+    return docs.filter((d) => d.title.toLowerCase().includes(q));
+  }, [docs, query]);
+
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-6">
-      {/* Top Bar */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+    <div className="min-h-screen bg-slate-950 text-white relative overflow-hidden">
+      {/* glow bg */}
+      <div className="absolute -top-24 -left-24 w-[520px] h-[520px] bg-blue-600/15 blur-3xl rounded-full" />
+      <div className="absolute -bottom-24 -right-24 w-[520px] h-[520px] bg-purple-600/15 blur-3xl rounded-full" />
 
-        <button
-          onClick={() => {
-            localStorage.removeItem("token");
-            router.push("/login");
-          }}
-          className="px-4 py-2 bg-red-600 rounded-lg"
-        >
-          Logout
-        </button>
-      </div>
+      {/* topbar */}
+      <div className="sticky top-0 z-20 border-b border-slate-800 bg-slate-950/70 backdrop-blur">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div>
+            <p className="text-xs text-slate-400">Workspace</p>
+            <h1 className="text-2xl font-bold leading-tight">Dashboard</h1>
+          </div>
 
-      {/* Error */}
-      {error && (
-        <div className="mb-4 p-3 rounded-lg bg-red-900/40 border border-red-700 text-red-200">
-          {error}
-        </div>
-      )}
-
-      {/* Upload PDF */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-6">
-        <h2 className="text-lg font-semibold mb-3">Upload PDF</h2>
-
-        <form onSubmit={handleUpload} className="flex flex-col md:flex-row gap-3">
-          <input
-            className="flex-1 p-3 rounded-lg bg-slate-800 border border-slate-700"
-            placeholder="Title (optional)"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-
-          <input
-            className="flex-1 p-3 rounded-lg bg-slate-800 border border-slate-700"
-            type="file"
-            accept="application/pdf"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-          />
-
-          <button
-            disabled={uploading}
-            className="px-5 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 transition disabled:opacity-60"
-          >
-            {uploading ? "Uploading..." : "Upload"}
-          </button>
-        </form>
-
-        {file && (
-          <p className="text-sm text-slate-400 mt-2">
-            Selected: <span className="text-slate-200">{file.name}</span>
-          </p>
-        )}
-      </div>
-
-      {/* Docs Header */}
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-semibold">Your Documents</h2>
-
-        <button
-          onClick={loadDocs}
-          className="text-sm px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700"
-        >
-          Refresh
-        </button>
-      </div>
-
-      {/* Docs List */}
-      {loadingDocs ? (
-        <p className="text-slate-400">Loading documents...</p>
-      ) : docs.length === 0 ? (
-        <p className="text-slate-400">No documents yet. Upload one to start.</p>
-      ) : (
-        <div className="grid gap-4">
-          {docs.map((d) => (
+          <div className="flex items-center gap-3">
             <button
-              key={d.id}
-              onClick={() => router.push(`/doc/${d.id}`)}
-              className="text-left bg-slate-900 p-4 rounded-xl border border-slate-800 hover:border-slate-600 transition"
+              onClick={async () => {
+                try {
+                  await loadDocs();
+                } catch {}
+              }}
+              className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 transition"
             >
-              <p className="font-semibold text-lg">{d.title}</p>
-              <p className="text-sm text-slate-400 mt-1">
-                Role: <span className="text-slate-200">{d.myRole || "OWNER"}</span>
-              </p>
+              Refresh
             </button>
-          ))}
+
+            <button
+              onClick={() => {
+                localStorage.removeItem("token");
+                router.replace("/login");
+              }}
+              className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 transition font-semibold"
+            >
+              Logout
+            </button>
+          </div>
         </div>
-      )}
+      </div>
+
+      <div className="max-w-6xl mx-auto px-4 py-6">
+        {error && (
+          <div className="mb-5 p-3 rounded-xl bg-red-900/30 border border-red-700 text-red-200 text-sm">
+            {error}
+          </div>
+        )}
+
+        <div className="grid lg:grid-cols-[0.9fr_1.1fr] gap-6">
+          {/* upload card */}
+          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-xl backdrop-blur">
+            <h2 className="text-lg font-semibold mb-1">Upload PDF</h2>
+            <p className="text-sm text-slate-400 mb-4">
+              Add a new document to your workspace.
+            </p>
+
+            <form onSubmit={uploadPdf} className="space-y-3">
+              <input
+                className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 outline-none focus:border-slate-600"
+                placeholder="Title (optional)"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+
+              <input
+                className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 outline-none focus:border-slate-600"
+                type="file"
+                accept="application/pdf"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+              />
+
+              <button
+                disabled={uploading}
+                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 transition font-semibold disabled:opacity-60"
+              >
+                {uploading ? "Uploading..." : "Upload"}
+              </button>
+            </form>
+          </div>
+
+          {/* docs list */}
+          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-xl backdrop-blur">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-lg font-semibold">Your Documents</h2>
+                <p className="text-sm text-slate-400">
+                  {docs.length} total
+                </p>
+              </div>
+
+              <input
+                className="w-[240px] max-w-full p-3 rounded-xl bg-slate-950 border border-slate-800 outline-none focus:border-slate-600"
+                placeholder="Search docs..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+
+            {loading ? (
+              <p className="text-slate-400">Loading documents...</p>
+            ) : filteredDocs.length === 0 ? (
+              <p className="text-slate-400">No documents found.</p>
+            ) : (
+              <div className="space-y-3">
+                {filteredDocs.map((d) => (
+                  <button
+                    key={d.id}
+                    onClick={() => router.push(`/doc/${d.id}`)}
+                    className="w-full text-left p-4 rounded-2xl bg-slate-950 border border-slate-800 hover:border-slate-600 transition"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-slate-100">{d.title}</p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          Open document → add comments & share
+                        </p>
+                      </div>
+                      <RoleBadge role={d.myRole} />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
